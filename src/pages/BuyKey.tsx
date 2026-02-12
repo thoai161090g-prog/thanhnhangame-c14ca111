@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 
 export default function BuyKey() {
-  const { user, refreshKeyStatus } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [selectedPkg, setSelectedPkg] = useState<string | null>(null);
@@ -21,39 +21,20 @@ export default function BuyKey() {
     if (!user || !pkg) return;
     setConfirming(true);
 
-    // Calculate expiration
-    let expiresAt: string | null = null;
-    if (pkg.days) {
-      const d = new Date();
-      d.setDate(d.getDate() + pkg.days);
-      expiresAt = d.toISOString();
-    }
-
-    // Create key
-    const { data: keyData, error: keyError } = await supabase
-      .from("license_keys")
-      .insert({ user_id: user.id, package: pkg.id, price: pkg.price, expires_at: expiresAt })
-      .select()
-      .single();
-
-    if (keyError) {
-      toast({ title: "Lỗi", description: keyError.message, variant: "destructive" });
-      setConfirming(false);
-      return;
-    }
-
-    // Create transaction
-    await supabase.from("transactions").insert({
+    // Create pending transaction (admin will approve and create key)
+    const { error } = await supabase.from("transactions").insert({
       user_id: user.id,
-      license_key_id: keyData.id,
       package: pkg.id,
       amount: pkg.price,
-      status: "completed",
+      status: "pending",
       transfer_content: transferContent,
     });
 
-    await refreshKeyStatus();
-    toast({ title: "🎉 Thành công!", description: `Key ${pkg.label} đã được kích hoạt!` });
+    if (error) {
+      toast({ title: "Lỗi", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "✅ Đã gửi yêu cầu!", description: "Vui lòng chờ Admin duyệt và kích hoạt key cho bạn." });
+    }
     setSelectedPkg(null);
     setConfirming(false);
   };
@@ -103,7 +84,7 @@ export default function BuyKey() {
                 </div>
               </div>
               <Button onClick={handleConfirmPayment} disabled={confirming} className="w-full gradient-gold text-primary-foreground font-bold">
-                {confirming ? "Đang xử lý..." : "✅ Đã Chuyển Khoản - Kích Hoạt Key"}
+                {confirming ? "Đang xử lý..." : "✅ Đã Chuyển Khoản - Gửi Yêu Cầu Duyệt"}
               </Button>
               <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => setSelectedPkg(null)}>
                 ← Quay lại chọn gói

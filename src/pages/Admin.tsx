@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { formatVND } from "@/lib/md5-analyzer";
+import { formatVND, KEY_PACKAGES } from "@/lib/md5-analyzer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,6 +38,43 @@ export default function Admin() {
   const toggleKey = async (keyId: string, currentActive: boolean) => {
     await supabase.from("license_keys").update({ is_active: !currentActive }).eq("id", keyId);
     toast({ title: currentActive ? "Đã hủy key" : "Đã kích hoạt key" });
+    loadData();
+  };
+
+  const approveTransaction = async (tx: any) => {
+    // Find package info
+    const pkg = KEY_PACKAGES.find((p) => p.id === tx.package);
+    if (!pkg) return;
+
+    // Calculate expiration
+    let expiresAt: string | null = null;
+    if (pkg.days) {
+      const d = new Date();
+      d.setDate(d.getDate() + pkg.days);
+      expiresAt = d.toISOString();
+    }
+
+    // Create key
+    const { data: keyData, error: keyError } = await supabase
+      .from("license_keys")
+      .insert({ user_id: tx.user_id, package: tx.package, price: tx.amount, expires_at: expiresAt })
+      .select()
+      .single();
+
+    if (keyError) {
+      toast({ title: "Lỗi", description: keyError.message, variant: "destructive" });
+      return;
+    }
+
+    // Update transaction to completed
+    await supabase.from("transactions").update({ status: "completed", license_key_id: keyData.id }).eq("id", tx.id);
+    toast({ title: "✅ Đã duyệt!", description: `Key ${pkg.label} đã được cấp cho người dùng.` });
+    loadData();
+  };
+
+  const rejectTransaction = async (txId: string) => {
+    await supabase.from("transactions").update({ status: "rejected" }).eq("id", txId);
+    toast({ title: "❌ Đã từ chối giao dịch" });
     loadData();
   };
 
@@ -136,6 +173,7 @@ export default function Admin() {
                       <TableHead>Nội dung CK</TableHead>
                       <TableHead>Trạng thái</TableHead>
                       <TableHead>Thời gian</TableHead>
+                      <TableHead>Hành động</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -146,9 +184,21 @@ export default function Admin() {
                         <TableCell className="text-gold font-bold">{formatVND(t.amount)}</TableCell>
                         <TableCell className="font-mono text-xs">{t.transfer_content}</TableCell>
                         <TableCell>
-                          <span className="px-2 py-1 rounded text-xs font-bold bg-green-900 text-green-300">{t.status}</span>
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${
+                            t.status === "completed" ? "bg-green-900 text-green-300" :
+                            t.status === "rejected" ? "bg-red-900 text-red-300" :
+                            "bg-yellow-900 text-yellow-300"
+                          }`}>{t.status === "pending" ? "Chờ duyệt" : t.status === "completed" ? "Đã duyệt" : "Từ chối"}</span>
                         </TableCell>
                         <TableCell>{new Date(t.created_at).toLocaleString("vi-VN")}</TableCell>
+                        <TableCell>
+                          {t.status === "pending" && (
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={() => approveTransaction(t)}>✅ Duyệt</Button>
+                              <Button size="sm" variant="destructive" onClick={() => rejectTransaction(t.id)}>❌</Button>
+                            </div>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

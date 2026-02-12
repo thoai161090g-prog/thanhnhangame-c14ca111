@@ -4,6 +4,8 @@ import { GAMES } from "@/lib/md5-analyzer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Fireworks } from "@/components/Fireworks";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Menu } from "lucide-react";
 
 export default function Index() {
   const { user, isAdmin, signOut } = useAuth();
@@ -19,22 +21,31 @@ export default function Index() {
           <h1 className="text-3xl md:text-4xl font-extrabold text-gold text-shadow-gold">
             🏆 Thành Nhân VIP MD5
           </h1>
-          <div className="flex items-center gap-3">
-            {isAdmin && (
-              <Button variant="outline" className="border-gold text-gold" onClick={() => navigate("/admin")}>
-                🔧 Admin
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-gold">
+                <Menu className="h-6 w-6" />
               </Button>
-            )}
-            <Button variant="outline" className="border-gold text-gold" onClick={() => navigate("/buy-key")}>
-              🔑 Mua Key
-            </Button>
-            <Button variant="outline" className="border-gold text-gold" onClick={() => navigate("/history")}>
-              📜 Lịch sử
-            </Button>
-            <Button variant="ghost" className="text-muted-foreground" onClick={signOut}>
-              Đăng xuất
-            </Button>
-          </div>
+            </SheetTrigger>
+            <SheetContent side="right" className="bg-background border-border w-64">
+              <nav className="flex flex-col gap-3 mt-8">
+                {isAdmin && (
+                  <Button variant="outline" className="border-gold text-gold justify-start" onClick={() => navigate("/admin")}>
+                    🔧 Admin
+                  </Button>
+                )}
+                <Button variant="outline" className="border-gold text-gold justify-start" onClick={() => navigate("/buy-key")}>
+                  🔑 Mua Key
+                </Button>
+                <Button variant="outline" className="border-gold text-gold justify-start" onClick={() => navigate("/history")}>
+                  📜 Lịch sử
+                </Button>
+                <Button variant="ghost" className="text-muted-foreground justify-start" onClick={signOut}>
+                  🚪 Đăng xuất
+                </Button>
+              </nav>
+            </SheetContent>
+          </Sheet>
         </div>
       </header>
 

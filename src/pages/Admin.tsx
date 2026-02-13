@@ -69,12 +69,43 @@ export default function Admin() {
     // Update transaction to completed
     await supabase.from("transactions").update({ status: "completed", license_key_id: keyData.id }).eq("id", tx.id);
     toast({ title: "✅ Đã duyệt!", description: `Key ${pkg.label} đã được cấp cho người dùng.` });
+
+    // Telegram notify
+    try {
+      await supabase.functions.invoke("telegram-notify", {
+        body: {
+          email: tx.transfer_content,
+          amount: tx.amount,
+          package_name: pkg.label,
+          transfer_content: tx.transfer_content,
+          status: "completed",
+        },
+      });
+    } catch (e) {
+      console.error("Telegram notify failed:", e);
+    }
+
     loadData();
   };
 
-  const rejectTransaction = async (txId: string) => {
-    await supabase.from("transactions").update({ status: "rejected" }).eq("id", txId);
+  const rejectTransaction = async (tx: any) => {
+    await supabase.from("transactions").update({ status: "rejected" }).eq("id", tx.id);
     toast({ title: "❌ Đã từ chối giao dịch" });
+
+    try {
+      await supabase.functions.invoke("telegram-notify", {
+        body: {
+          email: tx.transfer_content,
+          amount: tx.amount,
+          package_name: tx.package,
+          transfer_content: tx.transfer_content,
+          status: "rejected",
+        },
+      });
+    } catch (e) {
+      console.error("Telegram notify failed:", e);
+    }
+
     loadData();
   };
 
@@ -195,7 +226,7 @@ export default function Admin() {
                           {t.status === "pending" && (
                             <div className="flex gap-2">
                               <Button size="sm" onClick={() => approveTransaction(t)}>✅ Duyệt</Button>
-                              <Button size="sm" variant="destructive" onClick={() => rejectTransaction(t.id)}>❌</Button>
+                              <Button size="sm" variant="destructive" onClick={() => rejectTransaction(t)}>❌</Button>
                             </div>
                           )}
                         </TableCell>

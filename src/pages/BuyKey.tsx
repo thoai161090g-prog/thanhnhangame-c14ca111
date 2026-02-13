@@ -34,6 +34,20 @@ export default function BuyKey() {
       toast({ title: "Lỗi", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "✅ Đã gửi yêu cầu!", description: "Vui lòng chờ Admin duyệt và kích hoạt key cho bạn." });
+      // Send Telegram notification
+      try {
+        await supabase.functions.invoke("telegram-notify", {
+          body: {
+            email: user.email,
+            amount: pkg.price,
+            package_name: pkg.label,
+            transfer_content: transferContent,
+            status: "pending",
+          },
+        });
+      } catch (e) {
+        console.error("Telegram notify failed:", e);
+      }
     }
     setSelectedPkg(null);
     setConfirming(false);

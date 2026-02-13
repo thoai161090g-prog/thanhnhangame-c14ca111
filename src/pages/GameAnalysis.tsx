@@ -1,12 +1,19 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { validMd5, analyzeMd5, GAMES } from "@/lib/md5-analyzer";
+import { validMd5, GAMES } from "@/lib/md5-analyzer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+
+interface AnalysisResult {
+  tai: number;
+  xiu: number;
+  confidence: number;
+  result: string;
+}
 
 export default function GameAnalysis() {
   const { gameId } = useParams<{ gameId: string }>();
@@ -14,7 +21,7 @@ export default function GameAnalysis() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [md5Input, setMd5Input] = useState("");
-  const [result, setResult] = useState<ReturnType<typeof analyzeMd5> | null>(null);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
   const [phase, setPhase] = useState<"idle" | "countdown" | "done">("idle");
   const [countdown, setCountdown] = useState(3);
 
@@ -27,22 +34,21 @@ export default function GameAnalysis() {
       setCountdown(i);
       await new Promise((r) => setTimeout(r, 1000));
     }
-    const res = analyzeMd5(md5);
-    setResult(res);
-    setPhase("done");
 
-    if (user) {
-      await supabase.from("analysis_history").insert({
-        user_id: user.id,
-        game: game.name,
-        md5_input: md5,
-        result: res.result,
-        tai_percent: res.tai,
-        xiu_percent: res.xiu,
-        confidence: res.confidence,
-      });
+    // Call server-side analysis (algorithm hidden)
+    const { data, error } = await supabase.functions.invoke("analyze-md5", {
+      body: { md5, game: game?.name || "Unknown" },
+    });
+
+    if (error || data?.error) {
+      toast({ title: "Lỗi", description: data?.error || error?.message || "Lỗi phân tích", variant: "destructive" });
+      setPhase("idle");
+      return;
     }
-  }, [user, game]);
+
+    setResult(data as AnalysisResult);
+    setPhase("done");
+  }, [game, toast]);
 
   const handleAnalyze = () => {
     if (!validMd5(md5Input)) {

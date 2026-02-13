@@ -4,21 +4,10 @@ export function validMd5(s: string): boolean {
 
 export function analyzeMd5(md5: string) {
   const x = BigInt("0x" + md5);
-
-  // Enhanced algorithm with multiple hash segments
-  const seg1 = Number(x % 100n);
-  const seg2 = Number((x >> 8n) % 100n);
-  const seg3 = Number((x >> 16n) % 100n);
-  const seg4 = Number((x >> 32n) % 100n);
-
-  // Weighted combination
-  const weightedScore = (seg1 * 0.4 + seg2 * 0.25 + seg3 * 0.2 + seg4 * 0.15);
-
-  const tai = Math.round(weightedScore);
+  const tai = Number(x % 100n);
   const xiu = 100 - tai;
   const confidence = Math.min(Math.abs(tai - xiu) + 50, 99);
   const result = tai >= 50 ? "Tài" : "Xỉu";
-
   return { tai, xiu, confidence, result };
 }
 

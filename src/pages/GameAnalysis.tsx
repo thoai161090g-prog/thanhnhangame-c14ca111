@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,12 +15,36 @@ export default function GameAnalysis() {
   const { toast } = useToast();
   const [md5Input, setMd5Input] = useState("");
   const [result, setResult] = useState<ReturnType<typeof analyzeMd5> | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "countdown" | "done">("idle");
+  const [countdown, setCountdown] = useState(3);
 
   const game = GAMES.find((g) => g.id === gameId);
-  if (!game) return <div className="min-h-screen gradient-vip flex items-center justify-center text-foreground">Game không tồn tại</div>;
 
-  const handleAnalyze = async () => {
+  const runCountdown = useCallback(async (md5: string) => {
+    setPhase("countdown");
+    setResult(null);
+    for (let i = 3; i >= 1; i--) {
+      setCountdown(i);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    const res = analyzeMd5(md5);
+    setResult(res);
+    setPhase("done");
+
+    if (user) {
+      await supabase.from("analysis_history").insert({
+        user_id: user.id,
+        game: game.name,
+        md5_input: md5,
+        result: res.result,
+        tai_percent: res.tai,
+        xiu_percent: res.xiu,
+        confidence: res.confidence,
+      });
+    }
+  }, [user, game]);
+
+  const handleAnalyze = () => {
     if (!validMd5(md5Input)) {
       toast({ title: "Lỗi", description: "Mã MD5 không hợp lệ! Cần 32 ký tự hex.", variant: "destructive" });
       return;
@@ -30,26 +54,10 @@ export default function GameAnalysis() {
       navigate("/buy-key");
       return;
     }
-
-    setAnalyzing(true);
-    await new Promise((r) => setTimeout(r, 1500)); // animation delay
-    const res = analyzeMd5(md5Input);
-    setResult(res);
-
-    // Save to history
-    if (user) {
-      await supabase.from("analysis_history").insert({
-        user_id: user.id,
-        game: game.name,
-        md5_input: md5Input,
-        result: res.result,
-        tai_percent: res.tai,
-        xiu_percent: res.xiu,
-        confidence: res.confidence,
-      });
-    }
-    setAnalyzing(false);
+    runCountdown(md5Input);
   };
+
+  if (!game) return <div className="min-h-screen gradient-vip flex items-center justify-center text-foreground">Game không tồn tại</div>;
 
   return (
     <div className="min-h-screen gradient-vip">
@@ -77,10 +85,10 @@ export default function GameAnalysis() {
             />
             <Button
               onClick={handleAnalyze}
-              disabled={analyzing}
+              disabled={phase === "countdown"}
               className="w-full gradient-gold text-primary-foreground font-bold text-lg py-6"
             >
-              {analyzing ? "⏳ Đang phân tích..." : "🔍 Phân Tích MD5"}
+              {phase === "countdown" ? "⏳ Đang phân tích..." : "🔍 Phân Tích MD5"}
             </Button>
             {!hasValidKey && (
               <p className="text-center text-accent text-sm">⚠️ Bạn cần mua key để sử dụng.{" "}
@@ -90,35 +98,118 @@ export default function GameAnalysis() {
           </CardContent>
         </Card>
 
+        {/* Countdown */}
+        {phase === "countdown" && (
+          <div className="flex flex-col items-center justify-center py-16 space-y-6">
+            <div className="relative">
+              <div className="w-32 h-32 rounded-full border-4 border-primary flex items-center justify-center animate-pulse">
+                <span className="text-6xl font-extrabold text-gold" key={countdown} style={{
+                  animation: "countPop 0.5s ease-out"
+                }}>
+                  {countdown}
+                </span>
+              </div>
+              <div className="absolute inset-0 w-32 h-32 rounded-full border-4 border-primary/30 animate-ping" />
+            </div>
+            <p className="text-muted-foreground text-lg animate-pulse">🔄 Đang phân tích mã MD5...</p>
+          </div>
+        )}
+
         {/* Result */}
-        {result && (
-          <Card className={`border-2 ${result.result === "Tài" ? "border-primary glow-gold" : "border-accent glow-red"} animate-in fade-in-0 zoom-in-95 duration-500`}>
-            <CardContent className="py-8 text-center space-y-4">
-              <div className="text-6xl font-extrabold animate-in slide-in-from-bottom-4 duration-700">
+        {phase === "done" && result && (
+          <Card className={`border-2 overflow-hidden ${result.result === "Tài" ? "border-primary glow-gold" : "border-accent glow-red"}`}
+            style={{ animation: "resultReveal 0.6s ease-out" }}>
+            <CardContent className="py-10 text-center space-y-6">
+              {/* Main result */}
+              <div style={{ animation: "resultBounce 0.8s ease-out" }}>
                 {result.result === "Tài" ? (
-                  <span className="text-gold text-shadow-gold">🎯 TÀI</span>
+                  <div className="space-y-2">
+                    <div className="text-7xl">🎯</div>
+                    <div className="text-5xl font-black text-gold tracking-wider" style={{ textShadow: "0 0 20px hsl(var(--primary) / 0.5)" }}>
+                      TÀI
+                    </div>
+                  </div>
                 ) : (
-                  <span className="text-accent">🎲 XỈU</span>
+                  <div className="space-y-2">
+                    <div className="text-7xl">🎲</div>
+                    <div className="text-5xl font-black text-accent tracking-wider" style={{ textShadow: "0 0 20px hsl(var(--accent) / 0.5)" }}>
+                      XỈU
+                    </div>
+                  </div>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-4 mt-4">
-                <div className="p-3 rounded-lg bg-muted">
-                  <div className="text-sm text-muted-foreground">Tài</div>
-                  <div className="text-2xl font-bold text-gold">{result.tai}%</div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-3 pt-4" style={{ animation: "fadeSlideUp 0.6s ease-out 0.3s both" }}>
+                <div className="p-4 rounded-xl bg-muted/80 backdrop-blur-sm border border-border">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Tài</div>
+                  <div className="text-3xl font-black text-gold mt-1">{result.tai}%</div>
                 </div>
-                <div className="p-3 rounded-lg bg-muted">
-                  <div className="text-sm text-muted-foreground">Độ tin cậy</div>
-                  <div className="text-2xl font-bold text-foreground">{result.confidence}%</div>
+                <div className="p-4 rounded-xl bg-muted/80 backdrop-blur-sm border border-border">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Độ tin cậy</div>
+                  <div className="text-3xl font-black text-foreground mt-1">{result.confidence}%</div>
                 </div>
-                <div className="p-3 rounded-lg bg-muted">
-                  <div className="text-sm text-muted-foreground">Xỉu</div>
-                  <div className="text-2xl font-bold text-accent">{result.xiu}%</div>
+                <div className="p-4 rounded-xl bg-muted/80 backdrop-blur-sm border border-border">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Xỉu</div>
+                  <div className="text-3xl font-black text-accent mt-1">{result.xiu}%</div>
                 </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="px-4" style={{ animation: "fadeSlideUp 0.6s ease-out 0.5s both" }}>
+                <div className="h-3 rounded-full bg-muted overflow-hidden flex">
+                  <div
+                    className="h-full rounded-l-full transition-all duration-1000"
+                    style={{
+                      width: `${result.tai}%`,
+                      background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.7))",
+                    }}
+                  />
+                  <div
+                    className="h-full rounded-r-full transition-all duration-1000"
+                    style={{
+                      width: `${result.xiu}%`,
+                      background: "linear-gradient(90deg, hsl(var(--accent) / 0.7), hsl(var(--accent)))",
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between mt-1 text-xs text-muted-foreground">
+                  <span>Tài</span>
+                  <span>Xỉu</span>
+                </div>
+              </div>
+
+              {/* MD5 */}
+              <div className="text-xs text-muted-foreground font-mono break-all px-4" style={{ animation: "fadeSlideUp 0.6s ease-out 0.7s both" }}>
+                MD5: {md5Input}
               </div>
             </CardContent>
           </Card>
         )}
       </main>
+
+      <style>{`
+        @keyframes countPop {
+          0% { transform: scale(1.8); opacity: 0; }
+          50% { transform: scale(0.9); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes resultReveal {
+          0% { transform: scale(0.8) translateY(30px); opacity: 0; }
+          60% { transform: scale(1.02); }
+          100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        @keyframes resultBounce {
+          0% { transform: scale(0); opacity: 0; }
+          50% { transform: scale(1.15); }
+          70% { transform: scale(0.95); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes fadeSlideUp {
+          0% { transform: translateY(20px); opacity: 0; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }

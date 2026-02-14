@@ -204,7 +204,7 @@ export default function GameAnalysis() {
 
               {/* Robot */}
               <div className="relative" style={{ animation: "float 3s ease-in-out infinite" }}>
-                <img src="/robot-vip.png" alt="Robot VIP" className="w-48 h-48 object-contain drop-shadow-2xl" />
+                <img src="/robot-vip.png" alt="Robot VIP" className="w-48 h-48 object-contain drop-shadow-2xl" style={{ mixBlendMode: "screen" }} />
               </div>
 
               {/* Robot platform */}

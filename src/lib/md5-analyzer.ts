@@ -6,11 +6,11 @@ export function validMd5(s: string): boolean {
 // Do not expose algorithm in client code
 
 export const KEY_PACKAGES = [
-  { id: "1day", label: "1 Ngày", price: 35000, days: 1 },
-  { id: "3days", label: "3 Ngày", price: 70000, days: 3 },
-  { id: "1week", label: "1 Tuần", price: 111000, days: 7 },
-  { id: "1month", label: "1 Tháng", price: 150000, days: 30 },
-  { id: "lifetime", label: "Vĩnh Viễn", price: 250000, days: null },
+  { id: "1day", label: "1 Ngày", price: 25000, days: 1 },
+  { id: "3days", label: "3 Ngày", price: 55000, days: 3 },
+  { id: "1week", label: "1 Tuần", price: 89000, days: 7 },
+  { id: "1month", label: "1 Tháng", price: 120000, days: 30 },
+  { id: "lifetime", label: "Vĩnh Viễn", price: 177000, days: null },
 ] as const;
 
 export const GAMES = [

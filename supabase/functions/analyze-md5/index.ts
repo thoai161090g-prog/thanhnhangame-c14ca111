@@ -6,10 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// Rate limit: store last request timestamps per user
 const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT_WINDOW = 60_000; // 1 minute
-const RATE_LIMIT_MAX = 10; // max 10 requests per minute
+const RATE_LIMIT_WINDOW = 60_000;
+const RATE_LIMIT_MAX = 10;
 
 function checkRateLimit(userId: string): boolean {
   const now = Date.now();
@@ -21,13 +20,55 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
-// Server-side MD5 analysis - algorithm hidden from client
+// VIP Bit Mixing Function
+function mixBits(x: number): number {
+  x ^= (x >>> 16);
+  x = Math.imul(x, 0x7feb352d) >>> 0;
+  x ^= (x >>> 15);
+  x = Math.imul(x, 0x846ca68b) >>> 0;
+  x ^= (x >>> 16);
+  return x;
+}
+
+// VIP Core Algorithm
 function analyzeMd5(md5: string) {
-  const x = BigInt("0x" + md5);
-  const tai = Number(x % 100n);
-  const xiu = 100 - tai;
-  const confidence = Math.min(Math.abs(tai - xiu) + 50, 99);
-  const result = tai >= 50 ? "Tài" : "Xỉu";
+  const lower = md5.toLowerCase();
+
+  // Split into 4 blocks of 8 hex chars
+  const a = parseInt(lower.slice(0, 8), 16) >>> 0;
+  const b = parseInt(lower.slice(8, 16), 16) >>> 0;
+  const c = parseInt(lower.slice(16, 24), 16) >>> 0;
+  const d = parseInt(lower.slice(24, 32), 16) >>> 0;
+
+  // XOR mix
+  let mix = (a ^ b ^ c ^ d) >>> 0;
+
+  // Multiply by prime for entropy
+  mix = Math.imul(mix, 0x9E3779B1) >>> 0; // 2654435761
+
+  // Advanced bit mixing
+  mix = mixBits(mix);
+
+  // Normalize to 0–1
+  const normalized = mix / 0xffffffff;
+
+  // Convert to percentage
+  const percent = normalized * 100;
+
+  let result: string;
+  let confidence: number;
+
+  if (percent >= 50) {
+    result = "Tài";
+    confidence = Math.round(percent * 100) / 100;
+  } else {
+    result = "Xỉu";
+    confidence = Math.round((100 - percent) * 100) / 100;
+  }
+
+  const tai = Math.round(percent * 100) / 100;
+  const xiu = Math.round((100 - percent) * 100) / 100;
+
   return { tai, xiu, confidence, result };
 }
 
@@ -37,7 +78,6 @@ serve(async (req) => {
   }
 
   try {
-    // Verify auth
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -60,7 +100,6 @@ serve(async (req) => {
       });
     }
 
-    // Rate limit check
     if (!checkRateLimit(user.id)) {
       return new Response(JSON.stringify({ error: 'Quá nhiều yêu cầu. Vui lòng chờ 1 phút.' }), {
         status: 429,
@@ -70,7 +109,6 @@ serve(async (req) => {
 
     const { md5, game } = await req.json();
 
-    // Validate MD5 input
     if (!md5 || typeof md5 !== 'string' || md5.length !== 32 || !/^[0-9a-fA-F]+$/.test(md5)) {
       return new Response(JSON.stringify({ error: 'MD5 không hợp lệ' }), {
         status: 400,
@@ -78,7 +116,6 @@ serve(async (req) => {
       });
     }
 
-    // Check valid key server-side
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const adminClient = createClient(supabaseUrl, serviceKey);
 
@@ -90,10 +127,8 @@ serve(async (req) => {
       });
     }
 
-    // Run analysis
     const analysis = analyzeMd5(md5);
 
-    // Save to history
     await adminClient.from('analysis_history').insert({
       user_id: user.id,
       game: game || 'Unknown',

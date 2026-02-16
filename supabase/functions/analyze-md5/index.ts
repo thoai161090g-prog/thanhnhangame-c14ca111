@@ -52,22 +52,15 @@ function analyzeMd5(md5: string) {
   // Normalize to 0–1
   const normalized = mix / 0xffffffff;
 
-  // Convert to percentage
-  const percent = normalized * 100;
+  // Convert to percentage and round to integer 1-100
+  const rawPercent = normalized * 100;
+  let tai = Math.round(rawPercent);
+  if (tai < 1) tai = 1;
+  if (tai > 99) tai = 99;
+  const xiu = 100 - tai;
 
-  let result: string;
-  let confidence: number;
-
-  if (percent >= 50) {
-    result = "Tài";
-    confidence = Math.round(percent * 100) / 100;
-  } else {
-    result = "Xỉu";
-    confidence = Math.round((100 - percent) * 100) / 100;
-  }
-
-  const tai = Math.round(percent * 100) / 100;
-  const xiu = Math.round((100 - percent) * 100) / 100;
+  const result = tai >= 50 ? "Tài" : "Xỉu";
+  const confidence = result === "Tài" ? tai : xiu;
 
   return { tai, xiu, confidence, result };
 }

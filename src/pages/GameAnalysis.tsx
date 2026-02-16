@@ -153,27 +153,6 @@ export default function GameAnalysis() {
       </header>
 
       <main className="relative z-10 max-w-lg mx-auto px-4 py-4 space-y-4">
-        {/* Robot mascot */}
-        <div className="flex justify-center">
-          <div className="relative">
-            <div className="absolute inset-0 rounded-full" style={{
-              background: "radial-gradient(circle, rgba(255,174,0,0.3) 0%, transparent 70%)",
-              filter: "blur(20px)",
-              transform: "scale(1.5)",
-            }} />
-            <img
-              src="/robot-vip.png"
-              alt="VIP Robot"
-              className="relative w-28 h-28 object-contain"
-              style={{
-                mixBlendMode: "screen",
-                animation: "robotFloat 3s ease-in-out infinite",
-                filter: "drop-shadow(0 0 15px rgba(255,174,0,0.4))",
-              }}
-            />
-          </div>
-        </div>
-
         {/* MD5 Input with golden dragon border */}
         <div className="rounded-2xl p-[2px] relative overflow-hidden" style={{
           background: "linear-gradient(135deg, #ffd700, #ff6a00, #ffd700, #ff6a00)",

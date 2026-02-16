@@ -239,7 +239,7 @@ export default function GameAnalysis() {
               }} />
             </div>
             <p className="text-sm font-bold animate-pulse" style={{ color: "rgba(255,200,100,0.7)" }}>
-              🐉 Engine AI VIP đang xử lý...
+              🐉 THUẬT TOÁN THANH NHÂN VIP ĐANG XỬ LÍ VUI LÒNG CHỜ
             </p>
           </div>
         )}

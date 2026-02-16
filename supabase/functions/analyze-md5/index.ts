@@ -30,39 +30,58 @@ function mixBits(x: number): number {
   return x;
 }
 
-// VIP Core Algorithm
-function analyzeMd5(md5: string) {
+// VIP Core Algorithm (68GB, default)
+function analyzeMd5Vip(md5: string) {
   const lower = md5.toLowerCase();
-
-  // Split into 4 blocks of 8 hex chars
   const a = parseInt(lower.slice(0, 8), 16) >>> 0;
   const b = parseInt(lower.slice(8, 16), 16) >>> 0;
   const c = parseInt(lower.slice(16, 24), 16) >>> 0;
   const d = parseInt(lower.slice(24, 32), 16) >>> 0;
 
-  // XOR mix
   let mix = (a ^ b ^ c ^ d) >>> 0;
-
-  // Multiply by prime for entropy
-  mix = Math.imul(mix, 0x9E3779B1) >>> 0; // 2654435761
-
-  // Advanced bit mixing
+  mix = Math.imul(mix, 0x9E3779B1) >>> 0;
   mix = mixBits(mix);
 
-  // Normalize to 0–1
   const normalized = mix / 0xffffffff;
-
-  // Convert to percentage and round to integer 1-100
   const rawPercent = normalized * 100;
   let tai = Math.round(rawPercent);
   if (tai < 1) tai = 1;
   if (tai > 99) tai = 99;
   const xiu = 100 - tai;
-
   const result = tai >= 50 ? "Tài" : "Xỉu";
   const confidence = result === "Tài" ? tai : xiu;
-
   return { tai, xiu, confidence, result };
+}
+
+// LC79 Algorithm - last char method
+function analyzeMd5Lc79(md5: string) {
+  const lastChar = md5[31].toLowerCase();
+  const taiChars = ['0', '2', '4', '6', '8', 'a', 'c', 'e'];
+  const isTai = taiChars.includes(lastChar);
+
+  // Generate confidence from hash entropy
+  const lower = md5.toLowerCase();
+  const a = parseInt(lower.slice(0, 8), 16) >>> 0;
+  const b = parseInt(lower.slice(8, 16), 16) >>> 0;
+  let mix = (a ^ b) >>> 0;
+  mix = mixBits(mix);
+  const normalized = mix / 0xffffffff;
+  let confidence = Math.round(55 + normalized * 40); // 55-95%
+  if (confidence > 99) confidence = 99;
+  if (confidence < 55) confidence = 55;
+
+  const tai = isTai ? confidence : (100 - confidence);
+  const xiu = 100 - tai;
+  const result = isTai ? "Tài" : "Xỉu";
+  return { tai, xiu, confidence, result };
+}
+
+// Route to correct algorithm based on game
+function analyzeMd5(md5: string, game: string) {
+  if (game.toLowerCase().includes('lc79')) {
+    return analyzeMd5Lc79(md5);
+  }
+  return analyzeMd5Vip(md5);
 }
 
 serve(async (req) => {
@@ -120,7 +139,7 @@ serve(async (req) => {
       });
     }
 
-    const analysis = analyzeMd5(md5);
+    const analysis = analyzeMd5(md5, game || 'Unknown');
 
     await adminClient.from('analysis_history').insert({
       user_id: user.id,

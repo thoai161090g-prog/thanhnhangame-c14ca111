@@ -88,12 +88,18 @@ export default function Index() {
                 background: "rgba(255,248,230,0.95)",
               }}>
                 {/* Game icon */}
-                <div className="w-16 h-16 rounded-xl flex items-center justify-center text-4xl" style={{
-                  background: "linear-gradient(135deg, #fff5e0, #ffe4b3)",
-                  boxShadow: "0 4px 15px rgba(255,174,0,0.3)",
-                }}>
-                  {game.icon}
-                </div>
+                {game.image ? (
+                  <img src={game.image} alt={game.name} className="w-16 h-16 rounded-xl object-cover" style={{
+                    boxShadow: "0 4px 15px rgba(255,174,0,0.3)",
+                  }} />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl flex items-center justify-center text-4xl" style={{
+                    background: "linear-gradient(135deg, #fff5e0, #ffe4b3)",
+                    boxShadow: "0 4px 15px rgba(255,174,0,0.3)",
+                  }}>
+                    {game.icon}
+                  </div>
+                )}
                 <span className="font-bold text-sm" style={{ color: "#1a0a00" }}>{game.name}</span>
                 <button className="w-full py-2.5 rounded-xl font-black text-sm tracking-wider transition-all hover:brightness-110" style={{
                   background: "linear-gradient(135deg, #ff8c00, #ffae00, #ffd000)",

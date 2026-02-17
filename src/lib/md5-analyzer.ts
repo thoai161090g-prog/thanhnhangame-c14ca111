@@ -14,11 +14,12 @@ export const KEY_PACKAGES = [
 ] as const;
 
 export const GAMES = [
-  { id: "68gb", name: "68 Game Bài", icon: "🎰" },
-  { id: "lc79", name: "LC79", icon: "🎲" },
-  { id: "thien-duong", name: "Thiên Đường Trò Chơi", icon: "🏆" },
-  { id: "sao789", name: "Sao 789", icon: "⭐" },
-  { id: "ta28", name: "TA28", icon: "🎯" },
+  { id: "68gb", name: "68 Game Bài", icon: "🎰", image: "/game-68gb.jpeg" },
+  { id: "lc79", name: "LC79", icon: "🎲", image: null },
+  { id: "thien-duong", name: "Thiên Đường Trò Chơi", icon: "🏆", image: "/game-thien-duong.jpeg" },
+  { id: "sao789", name: "Sao 789", icon: "⭐", image: "/game-sao789.png" },
+  { id: "ta28", name: "TA28", icon: "🎯", image: "/game-ta28.png" },
+  { id: "betvip", name: "BetVIP", icon: "🔥", image: null },
 ] as const;
 
 export function formatVND(amount: number): string {

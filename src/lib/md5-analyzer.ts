@@ -14,12 +14,22 @@ export const KEY_PACKAGES = [
 ] as const;
 
 export const GAMES = [
-  { id: "68gb", name: "68 Game Bài", icon: "🎰", image: "/game-68gb.jpeg" },
-  { id: "lc79", name: "LC79", icon: "🎲", image: null },
-  { id: "thien-duong", name: "Thiên Đường Trò Chơi", icon: "🏆", image: "/game-thien-duong.jpeg" },
-  { id: "sao789", name: "Sao 789", icon: "⭐", image: "/game-sao789.png" },
-  { id: "ta28", name: "TA28", icon: "🎯", image: "/game-ta28.png" },
-  { id: "betvip", name: "BetVIP", icon: "🔥", image: null },
+  { id: "sunwin", name: "SUNWIN", subtitle: "Game bài", icon: "👑", image: null },
+  { id: "hitclub", name: "HITCLUB", subtitle: "Bắn cá", icon: "🎯", image: null },
+  { id: "68gb", name: "68GAMEBAI", subtitle: "Đại lý", icon: "✈️", image: "/game-68gb.jpeg" },
+  { id: "sao789", name: "SAO789", subtitle: "Slot game", icon: "🎰", image: "/game-sao789.png" },
+  { id: "son789", name: "SON789", subtitle: "Casino", icon: "📊", image: null },
+  { id: "sumclub", name: "SUMCLUB", subtitle: "Lộc phát", icon: "🍀", image: null },
+  { id: "ta28", name: "TA28", subtitle: "Quay hũ", icon: "💧", image: "/game-ta28.png" },
+  { id: "tik88", name: "TIK88", subtitle: "Tài xỉu", icon: "🎲", image: null },
+  { id: "rikvip", name: "RIKVIP", subtitle: "Game bài", icon: "👑", image: null },
+  { id: "betvip", name: "BETVIP", subtitle: "Nổ hũ", icon: "⭐", image: null },
+  { id: "b52", name: "B52", subtitle: "B52 club", icon: "✈️", image: null },
+  { id: "789club", name: "789CLUB", subtitle: "Macau", icon: "🎰", image: null },
+  { id: "lc79", name: "LC79", subtitle: "Game bài", icon: "👑", image: null },
+  { id: "xocdia88", name: "XOCDIA88", subtitle: "Xóc đĩa", icon: "🎵", image: null },
+  { id: "thien-duong", name: "THIÊN ĐƯỜNG TRÒ CHƠI", subtitle: "Casino", icon: "🦊", image: "/game-thien-duong.jpeg" },
+  { id: "baccarat", name: "BACCARAT", subtitle: "Bài", icon: "♥️", image: null },
 ] as const;
 
 export function formatVND(amount: number): string {

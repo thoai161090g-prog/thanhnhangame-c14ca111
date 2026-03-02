@@ -1,10 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { validMd5, GAMES } from "@/lib/md5-analyzer";
 import { useToast } from "@/hooks/use-toast";
-import { Fireworks } from "@/components/Fireworks";
 
 interface AnalysisResult {
   tai: number;
@@ -13,95 +12,93 @@ interface AnalysisResult {
   result: string;
 }
 
-interface HistoryItem {
-  md5: string;
-  result: string;
-  tai: number;
+interface HistoryDot {
+  type: "T" | "X";
 }
 
-function LanternDecor() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-      {/* Floating lanterns */}
-      {[...Array(6)].map((_, i) => (
-        <div key={`lantern-${i}`} className="absolute" style={{
-          left: `${10 + i * 16}%`,
-          top: `${-5 + Math.sin(i) * 8}%`,
-          fontSize: `${24 + i * 4}px`,
-          animation: `lanternSwing ${3 + i * 0.5}s ease-in-out infinite`,
-          animationDelay: `${i * 0.3}s`,
-          filter: "drop-shadow(0 0 8px rgba(255,50,0,0.6))",
-        }}>🏮</div>
-      ))}
-      {/* Cherry blossoms */}
-      {[...Array(18)].map((_, i) => (
-        <div key={`petal-${i}`} className="absolute" style={{
-          left: `${Math.random() * 100}%`,
-          top: `${Math.random() * 100}%`,
-          fontSize: `${10 + Math.random() * 12}px`,
-          animation: `petalFall ${6 + Math.random() * 8}s linear infinite`,
-          animationDelay: `${Math.random() * 6}s`,
-          opacity: 0.5 + Math.random() * 0.3,
-        }}>🌸</div>
-      ))}
-      {/* Gold coins */}
-      {[...Array(5)].map((_, i) => (
-        <div key={`coin-${i}`} className="absolute" style={{
-          left: `${15 + i * 18}%`,
-          bottom: `${5 + Math.random() * 10}%`,
-          fontSize: "16px",
-          animation: `coinFloat ${4 + i}s ease-in-out infinite`,
-          animationDelay: `${i * 0.8}s`,
-          opacity: 0.4,
-        }}>🪙</div>
-      ))}
-    </div>
-  );
-}
+// Game iframe URLs mapping
+const GAME_URLS: Record<string, string> = {
+  sunwin: "https://web.sunwin.bi",
+  hitclub: "https://hitclub1.com",
+  "68gb": "https://68gamebai1.com",
+  sao789: "https://sao789.net",
+  son789: "https://son789.net",
+  sumclub: "https://sumclub.net",
+  ta28: "https://ta28.net",
+  tik88: "https://tik88.net",
+  rikvip: "https://rikvip.net",
+  betvip: "https://betvip.net",
+  b52: "https://b52.club",
+  "789club": "https://789club.net",
+  xocdia88: "https://xocdia88.net",
+  "thien-duong": "https://thienduong.net",
+  baccarat: "https://baccarat.net",
+};
 
 export default function GameAnalysis() {
   const { gameId } = useParams<{ gameId: string }>();
-  const { user, hasValidKey } = useAuth();
+  const { hasValidKey } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
   const [md5Input, setMd5Input] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [phase, setPhase] = useState<"idle" | "countdown" | "done">("idle");
-  const [countdown, setCountdown] = useState(3);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [showFireworks, setShowFireworks] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "scanning" | "done">("idle");
+  const [scanText, setScanText] = useState("");
+  const [history, setHistory] = useState<HistoryDot[]>([]);
+  const [popupVisible, setPopupVisible] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Draggable
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x: 20, y: window.innerHeight * 0.15 });
+  const dragState = useRef({ dragging: false, startX: 0, startY: 0, startLeft: 0, startTop: 0 });
 
   const game = GAMES.find((g) => g.id === gameId);
+  const iframeUrl = GAME_URLS[gameId || ""] || "";
 
-  const runCountdown = useCallback(async (md5: string) => {
-    setPhase("countdown");
-    setResult(null);
-    for (let i = 3; i >= 1; i--) {
-      setCountdown(i);
-      await new Promise((r) => setTimeout(r, 1000));
-    }
+  // Drag handlers
+  const onHeaderPointerDown = useCallback((e: React.PointerEvent) => {
+    dragState.current = {
+      dragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      startLeft: pos.x,
+      startTop: pos.y,
+    };
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  }, [pos]);
 
-    const { data, error } = await supabase.functions.invoke("analyze-md5", {
-      body: { md5, game: game?.name || "Unknown" },
-    });
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (!dragState.current.dragging) return;
+      setPos({
+        x: Math.max(0, Math.min(window.innerWidth - 280, dragState.current.startLeft + (e.clientX - dragState.current.startX))),
+        y: Math.max(0, Math.min(window.innerHeight - 200, dragState.current.startTop + (e.clientY - dragState.current.startY))),
+      });
+    };
+    const onUp = () => { dragState.current.dragging = false; };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
 
-    if (error || data?.error) {
-      toast({ title: "Lỗi", description: data?.error || error?.message || "Lỗi phân tích", variant: "destructive" });
-      setPhase("idle");
-      return;
-    }
+  // Scanning animation
+  useEffect(() => {
+    if (phase !== "scanning") return;
+    const interval = setInterval(() => {
+      setScanText(String(Math.floor(Math.random() * 999999)).padStart(6, "0"));
+    }, 80);
+    return () => clearInterval(interval);
+  }, [phase]);
 
-    const res = data as AnalysisResult;
-    setResult(res);
-    setPhase("done");
-    setShowFireworks(true);
-    setTimeout(() => setShowFireworks(false), 4000);
-    setHistory((prev) => [{ md5, result: res.result, tai: res.tai }, ...prev].slice(0, 5));
-  }, [game, toast]);
-
-  const handleAnalyze = () => {
+  const handleAnalyze = useCallback(async () => {
+    setErrorMsg("");
     if (!validMd5(md5Input)) {
-      toast({ title: "Lỗi", description: "Mã MD5 không hợp lệ! Cần 32 ký tự hex.", variant: "destructive" });
+      setErrorMsg("⚠️ Vui lòng nhập đúng mã MD5 (32 ký tự hex)!");
       return;
     }
     if (!hasValidKey) {
@@ -109,324 +106,253 @@ export default function GameAnalysis() {
       navigate("/buy-key");
       return;
     }
-    runCountdown(md5Input);
+
+    setPhase("scanning");
+    setResult(null);
+
+    // Delay for scanning effect
+    await new Promise((r) => setTimeout(r, 2500));
+
+    const { data, error } = await supabase.functions.invoke("analyze-md5", {
+      body: { md5: md5Input, game: game?.name || "Unknown" },
+    });
+
+    if (error || data?.error) {
+      setErrorMsg("⚠️ " + (data?.error || error?.message || "Lỗi phân tích"));
+      setPhase("idle");
+      return;
+    }
+
+    const res = data as AnalysisResult;
+    setResult(res);
+    setPhase("done");
+    setHistory((prev) => [...prev, { type: (res.result === "Tài" ? "T" : "X") as "T" | "X" }].slice(-8));
+
+    // Auto clear input
+    setTimeout(() => setMd5Input(""), 2000);
+  }, [md5Input, hasValidKey, game, toast, navigate]);
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleAnalyze();
   };
 
-  if (!game) return <div className="min-h-screen flex items-center justify-center text-foreground">Game không tồn tại</div>;
+  if (!game) return <div className="min-h-screen flex items-center justify-center text-white bg-black">Game không tồn tại</div>;
 
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{
-      background: "radial-gradient(ellipse at 50% 0%, rgba(200,30,0,0.4) 0%, rgba(80,10,0,0.2) 40%, rgba(0,0,0,1) 80%)"
-    }}>
-      <LanternDecor />
-      {showFireworks && <Fireworks />}
+    <div style={{ margin: 0, width: "100%", height: "100vh", overflow: "hidden", background: "#000", fontFamily: "'Montserrat', sans-serif" }}>
+      {/* Game iframe */}
+      {iframeUrl && (
+        <iframe
+          src={iframeUrl}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", zIndex: 1 }}
+          title={game.name}
+        />
+      )}
 
-      {/* Decorative top border */}
-      <div className="absolute top-0 left-0 right-0 h-1" style={{
-        background: "linear-gradient(90deg, transparent, #ffae00, #ff4500, #ffae00, transparent)"
-      }} />
-
-      {/* Header */}
-      <header className="relative z-10 pt-5 pb-2 px-4">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <button onClick={() => navigate("/")} className="flex items-center gap-1 text-sm font-bold px-3 py-1.5 rounded-lg transition-all hover:scale-105" style={{
-            color: "#ffae00",
-            background: "rgba(255,174,0,0.1)",
-            border: "1px solid rgba(255,174,0,0.2)",
-          }}>
-            ← Trang chủ
-          </button>
-          <div className="text-center">
-            <h1 className="text-2xl font-black tracking-wider" style={{
-              background: "linear-gradient(135deg, #ffd700, #ffae00, #ff6a00)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}>
-              🧧 MD5 VIP PRO 🧧
-            </h1>
-          </div>
-          <div className="w-20" />
-        </div>
-        <p className="text-center text-xs mt-1" style={{ color: "rgba(255,200,100,0.5)" }}>
-          {game.icon} {game.name} • Engine AI VIP • @nhan161019
-        </p>
-      </header>
-
-      <main className="relative z-10 max-w-lg mx-auto px-4 py-4 space-y-4">
-        {/* MD5 Input with golden dragon border */}
-        <div className="rounded-2xl p-[2px] relative overflow-hidden" style={{
-          background: "linear-gradient(135deg, #ffd700, #ff6a00, #ffd700, #ff6a00)",
-          boxShadow: "0 0 25px rgba(255,174,0,0.3)",
+      {/* Fallback background if no iframe */}
+      {!iframeUrl && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 1,
+          background: "linear-gradient(180deg, #0a0a1a, #000)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexDirection: "column", gap: 12,
         }}>
-          <div className="absolute inset-0" style={{
-            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)",
-            animation: "shimmer 3s ease-in-out infinite",
-          }} />
-          <input
-            type="text"
-            placeholder="🔮 Nhập mã MD5 (32 ký tự)..."
-            value={md5Input}
-            onChange={(e) => setMd5Input(e.target.value)}
-            maxLength={32}
-            className="w-full px-5 py-4 rounded-2xl text-center font-mono text-base tracking-widest relative z-10"
-            style={{
-              background: "rgba(10,5,0,0.95)",
-              color: "#ffd700",
-              outline: "none",
-              border: "none",
-              caretColor: "#ffae00",
-            }}
-          />
+          <span style={{ fontSize: 64 }}>{game.icon}</span>
+          <span style={{ color: "#ffd700", fontWeight: 900, fontSize: 24, fontFamily: "'Orbitron', sans-serif" }}>{game.name}</span>
         </div>
+      )}
 
-        {/* Analyze Button */}
+      {/* Open Tool Button */}
+      {!popupVisible && (
         <button
-          onClick={handleAnalyze}
-          disabled={phase === "countdown"}
-          className="w-full py-4 rounded-2xl font-black text-xl tracking-widest transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 relative overflow-hidden"
+          onClick={() => setPopupVisible(true)}
           style={{
-            background: phase === "countdown"
-              ? "linear-gradient(135deg, #333, #555)"
-              : "linear-gradient(135deg, #ff2200, #ff6a00, #ffd000, #ff6a00, #ff2200)",
-            backgroundSize: "200% 100%",
-            animation: phase !== "countdown" ? "gradientShift 3s ease infinite" : "none",
-            color: "#fff",
-            boxShadow: phase !== "countdown" ? "0 4px 30px rgba(255,80,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)" : "none",
-            textShadow: "0 2px 4px rgba(0,0,0,0.5)",
+            position: "fixed", bottom: 20, right: 20, zIndex: 99,
+            width: 50, height: 50, borderRadius: "50%",
+            background: "#000", border: "2px solid #ffd700", color: "#ffd700",
+            fontWeight: "bold", fontSize: 20, cursor: "pointer", display: "flex",
+            boxShadow: "0 0 15px #ffd700", alignItems: "center", justifyContent: "center",
           }}
         >
-          {phase === "countdown" ? "⏳ ĐANG PHÂN TÍCH..." : "🐉 PHÂN TÍCH VIP 🐉"}
+          🤖
         </button>
+      )}
 
-        {!hasValidKey && (
-          <div className="text-center rounded-xl py-2 px-4" style={{
-            background: "rgba(255,0,0,0.1)",
-            border: "1px solid rgba(255,0,0,0.3)",
-          }}>
-            <p className="text-xs" style={{ color: "#ff6a6a" }}>
-              ⚠️ Bạn cần mua key.{" "}
-              <button onClick={() => navigate("/buy-key")} className="underline font-bold" style={{ color: "#ffae00" }}>Mua ngay</button>
-            </p>
-          </div>
-        )}
+      {/* Back button */}
+      <button
+        onClick={() => navigate("/")}
+        style={{
+          position: "fixed", top: 10, left: 10, zIndex: 1001,
+          padding: "6px 12px", borderRadius: 10, fontWeight: 700,
+          background: "rgba(0,0,0,0.7)", color: "#ffd700",
+          border: "1px solid rgba(255,215,0,0.3)", fontSize: 13, cursor: "pointer",
+          backdropFilter: "blur(10px)",
+        }}
+      >
+        ← Trang chủ
+      </button>
 
-        {/* Countdown */}
-        {phase === "countdown" && (
-          <div className="flex flex-col items-center py-8 space-y-4" style={{ animation: "fadeIn 0.4s ease-out" }}>
-            <div className="relative">
-              {/* Outer ring */}
-              <div className="w-28 h-28 rounded-full flex items-center justify-center" style={{
-                border: "3px solid transparent",
-                backgroundImage: "linear-gradient(rgba(10,5,0,0.9), rgba(10,5,0,0.9)), linear-gradient(135deg, #ffd700, #ff4500, #ffd700)",
-                backgroundOrigin: "border-box",
-                backgroundClip: "padding-box, border-box",
-                boxShadow: "0 0 40px rgba(255,174,0,0.4), 0 0 80px rgba(255,70,0,0.2)",
-                animation: "pulse 1.5s ease-in-out infinite",
-              }}>
-                <span className="text-6xl font-black" style={{
-                  background: "linear-gradient(135deg, #ffd700, #ff4500)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  filter: "drop-shadow(0 0 10px rgba(255,174,0,0.5))",
-                }} key={countdown}>
-                  {countdown}
-                </span>
-              </div>
-              {/* Spinning ring */}
-              <div className="absolute inset-[-4px] rounded-full" style={{
-                border: "2px dashed rgba(255,174,0,0.3)",
-                animation: "spin 3s linear infinite",
-              }} />
-            </div>
-            <p className="text-sm font-bold animate-pulse" style={{ color: "rgba(255,200,100,0.7)" }}>
-              🐉 THUẬT TOÁN THANH NHÂN VIP ĐANG XỬ LÍ VUI LÒNG CHỜ
-            </p>
-          </div>
-        )}
+      {/* VIP Popup */}
+      {popupVisible && (
+        <div
+          ref={popupRef}
+          style={{
+            position: "fixed", left: pos.x, top: pos.y, width: 260, zIndex: 1000,
+            background: "rgba(10, 10, 10, 0.65)",
+            backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+            borderRadius: 20, padding: 20,
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+          }}
+        >
+          {/* Neon border glow */}
+          <div style={{
+            position: "absolute", inset: -2, borderRadius: 22,
+            background: "linear-gradient(45deg, #ff0055, #00ff99, #00ccff, #ff0055)",
+            zIndex: -1, filter: "blur(10px)", opacity: 0.7,
+            animation: "neonGlow 6s linear infinite",
+          }} />
 
-        {/* Result */}
-        {phase === "done" && result && (
-          <div className="space-y-4" style={{ animation: "resultReveal 0.8s ease-out" }}>
-            {/* Main Result Card */}
-            <div className="rounded-2xl p-[2px] relative" style={{
-              background: result.result === "Tài"
-                ? "linear-gradient(135deg, #ff2200, #ffd700, #ff2200)"
-                : "linear-gradient(135deg, #0066ff, #00ddff, #0066ff)",
-              boxShadow: result.result === "Tài"
-                ? "0 0 40px rgba(255,50,0,0.4)"
-                : "0 0 40px rgba(0,150,255,0.4)",
+          {/* Header - draggable */}
+          <div
+            onPointerDown={onHeaderPointerDown}
+            style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              marginBottom: 15, cursor: "move",
+            }}
+          >
+            <span style={{
+              fontFamily: "'Orbitron', sans-serif", fontWeight: 900, fontSize: 14,
+              background: "linear-gradient(to right, #fff, #ffd700)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
             }}>
-              <div className="rounded-2xl py-6 text-center" style={{
-                background: "rgba(5,2,0,0.92)",
-              }}>
-                <div className="text-lg mb-1" style={{ color: "rgba(255,200,100,0.6)" }}>Kết quả phân tích</div>
-                <span className="text-7xl font-black tracking-[0.2em] block" style={{
-                  color: result.result === "Tài" ? "#ff3c00" : "#00c3ff",
-                  textShadow: result.result === "Tài"
-                    ? "0 0 30px rgba(255,60,0,0.6), 0 0 60px rgba(255,60,0,0.3)"
-                    : "0 0 30px rgba(0,195,255,0.6), 0 0 60px rgba(0,195,255,0.3)",
-                  animation: "resultGlow 2s ease-in-out infinite alternate",
-                }}>
-                  {result.result === "Tài" ? "🔥 TÀI" : "💎 XỈU"}
-                </span>
-              </div>
-            </div>
-
-            {/* Stats Grid */}
-            <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-xl p-3 text-center" style={{
-                background: "rgba(255,60,0,0.1)",
-                border: "1px solid rgba(255,60,0,0.3)",
-              }}>
-                <div className="text-[10px] font-bold mb-1" style={{ color: "rgba(255,60,0,0.7)" }}>TÀI</div>
-                <div className="text-xl font-black" style={{ color: "#ff3c00" }}>{result.tai}%</div>
-              </div>
-              <div className="rounded-xl p-3 text-center" style={{
-                background: "rgba(0,255,136,0.08)",
-                border: "1px solid rgba(0,255,136,0.3)",
-              }}>
-                <div className="text-[10px] font-bold mb-1" style={{ color: "rgba(0,255,136,0.7)" }}>ĐỘ TIN CẬY</div>
-                <div className="text-xl font-black" style={{
-                  color: "#00ff88",
-                  textShadow: "0 0 10px rgba(0,255,136,0.4)",
-                }}>{result.confidence}%</div>
-              </div>
-              <div className="rounded-xl p-3 text-center" style={{
-                background: "rgba(0,195,255,0.1)",
-                border: "1px solid rgba(0,195,255,0.3)",
-              }}>
-                <div className="text-[10px] font-bold mb-1" style={{ color: "rgba(0,195,255,0.7)" }}>XỈU</div>
-                <div className="text-xl font-black" style={{ color: "#00c3ff" }}>{result.xiu}%</div>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="space-y-1">
-              <div className="h-4 rounded-full overflow-hidden flex relative" style={{
-                background: "rgba(255,255,255,0.05)",
-                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)",
-              }}>
-                <div className="h-full rounded-l-full transition-all duration-1000 relative" style={{
-                  width: `${result.tai}%`,
-                  background: "linear-gradient(90deg, #ff2200, #ff6a00, #ffae00)",
-                  boxShadow: "0 0 12px #ff3c00",
-                }}>
-                  <div className="absolute inset-0 rounded-l-full" style={{
-                    background: "linear-gradient(180deg, rgba(255,255,255,0.3) 0%, transparent 50%)",
-                  }} />
-                </div>
-                <div className="h-full rounded-r-full transition-all duration-1000 relative" style={{
-                  width: `${result.xiu}%`,
-                  background: "linear-gradient(90deg, #0066ff, #00aaff, #00ddff)",
-                  boxShadow: "0 0 12px #00aaff",
-                }}>
-                  <div className="absolute inset-0 rounded-r-full" style={{
-                    background: "linear-gradient(180deg, rgba(255,255,255,0.3) 0%, transparent 50%)",
-                  }} />
-                </div>
-              </div>
-            </div>
-
-            {/* Feedback buttons */}
-            <div className="flex gap-3">
-              <button className="flex-1 py-3 rounded-xl font-black text-base tracking-wider text-white transition-all hover:scale-105 active:scale-95 relative overflow-hidden"
-                style={{
-                  background: "linear-gradient(135deg, #0d7a2e, #1db954)",
-                  border: "1px solid rgba(29,185,84,0.4)",
-                  boxShadow: "0 4px 15px rgba(29,185,84,0.3)",
-                }}>
-                ✅ ĐÚNG
-              </button>
-              <button className="flex-1 py-3 rounded-xl font-black text-base tracking-wider text-white transition-all hover:scale-105 active:scale-95 relative overflow-hidden"
-                style={{
-                  background: "linear-gradient(135deg, #8b1a1a, #dc2626)",
-                  border: "1px solid rgba(220,38,38,0.4)",
-                  boxShadow: "0 4px 15px rgba(220,38,38,0.3)",
-                }}>
-                ❌ SAI
-              </button>
-            </div>
-
-            {/* History */}
-            {history.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-xs font-bold" style={{ color: "rgba(255,200,100,0.6)" }}>📜 Lịch sử phiên</span>
-                  <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>{history.length}/5</span>
-                </div>
-                {history.map((h, i) => (
-                  <div key={i} className="flex justify-between items-center px-3 py-2 rounded-lg transition-all hover:scale-[1.01]" style={{
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,174,0,0.1)",
-                  }}>
-                    <span className="text-xs font-mono truncate max-w-[180px]" style={{ color: "rgba(255,255,255,0.4)" }}>
-                      {h.md5.slice(0, 16)}...
-                    </span>
-                    <span className="text-sm font-black" style={{
-                      color: h.result === "Tài" ? "#ff3c00" : "#00c3ff",
-                      textShadow: h.result === "Tài" ? "0 0 5px rgba(255,60,0,0.3)" : "0 0 5px rgba(0,195,255,0.3)",
-                    }}>
-                      {h.result === "Tài" ? "🔥 TÀI" : "💎 XỈU"} ({h.tai}%)
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+              THANH NHÂN VIP ⚡
+            </span>
+            <span
+              onClick={() => setPopupVisible(false)}
+              style={{ color: "rgba(255,255,255,0.5)", fontWeight: "bold", cursor: "pointer", fontSize: 16 }}
+            >
+              ✕
+            </span>
           </div>
-        )}
-      </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 text-center py-4 space-y-1">
-        <p className="text-xs font-bold" style={{ color: "rgba(255,174,0,0.4)" }}>
-          🧧 MD5 VIP PRO • Phân Tích AI Thông Minh 🧧
-        </p>
-        <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>
-          Admin: <a href="https://t.me/nhan161019" target="_blank" className="hover:underline" style={{ color: "rgba(255,174,0,0.4)" }}>@nhan161019</a>
-        </p>
-      </footer>
+          {/* MD5 Input */}
+          <input
+            type="text"
+            placeholder="DÁN MÃ MD5 VÀO ĐÂY..."
+            value={md5Input}
+            onChange={(e) => setMd5Input(e.target.value)}
+            onKeyDown={handleKeyPress}
+            maxLength={32}
+            style={{
+              width: "100%", padding: 12, borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(0,0,0,0.5)", color: "#00ff99",
+              fontFamily: "'Orbitron', sans-serif", fontSize: 11,
+              textAlign: "center", outline: "none", letterSpacing: 1,
+            }}
+          />
 
+          {/* Analyze Button */}
+          <button
+            onClick={handleAnalyze}
+            disabled={phase === "scanning"}
+            style={{
+              width: "100%", marginTop: 15, padding: 14, borderRadius: 15, border: "none",
+              background: "linear-gradient(90deg, #ffd700, #ff8c00)",
+              color: "#000", fontFamily: "'Orbitron', sans-serif", fontWeight: 900, fontSize: 12,
+              cursor: phase === "scanning" ? "not-allowed" : "pointer",
+              position: "relative", overflow: "hidden",
+              boxShadow: "0 5px 15px rgba(255, 140, 0, 0.4)",
+              opacity: phase === "scanning" ? 0.7 : 1,
+            }}
+          >
+            {phase === "scanning" ? "SYSTEM SCANNING..." : phase === "done" ? "QUÉT TIẾP (AUTO RESET)" : "BẮT ĐẦU QUÉT AI"}
+            {/* Shine effect */}
+            <div style={{
+              position: "absolute", top: 0, left: "-100%", width: "100%", height: "100%",
+              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)",
+              animation: "btnShine 3s infinite",
+            }} />
+          </button>
+
+          {/* Error */}
+          {errorMsg && (
+            <div style={{ color: "#ff5555", fontSize: 12, marginTop: 10 }}>{errorMsg}</div>
+          )}
+
+          {/* Scanning animation */}
+          {phase === "scanning" && (
+            <div style={{ textAlign: "center", marginTop: 15 }}>
+              <div style={{
+                width: 20, height: 20, border: "3px solid rgba(255,255,255,0.3)",
+                borderRadius: "50%", borderTopColor: "#00ff99",
+                animation: "spin 1s linear infinite", margin: "0 auto 10px",
+              }} />
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: 30, fontWeight: 900,
+                color: `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0")}`,
+                animation: "popIn 0.5s ease",
+              }}>
+                {scanText}
+              </div>
+            </div>
+          )}
+
+          {/* Result */}
+          {phase === "done" && result && (
+            <div style={{ textAlign: "center", marginTop: 15 }}>
+              <div style={{
+                fontFamily: "'Orbitron', sans-serif", fontSize: 48, fontWeight: 900,
+                letterSpacing: 2, animation: "popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+                color: result.result === "Tài" ? "#00ff99" : "#ff0055",
+                textShadow: result.result === "Tài"
+                  ? "0 0 20px rgba(0,255,153,0.8)"
+                  : "0 0 20px rgba(255,0,85,0.8)",
+              }}>
+                {result.result === "Tài" ? "TÀI" : "XỈU"}
+              </div>
+              <div style={{
+                fontSize: 10, color: "#00ffff", textTransform: "uppercase",
+                letterSpacing: 1, marginBottom: 10,
+              }}>
+                ĐỘ CHÍNH XÁC: {result.confidence}%
+              </div>
+
+              {/* Stats */}
+              <div style={{ display: "flex", justifyContent: "center", gap: 12, fontSize: 11, marginBottom: 8 }}>
+                <span style={{ color: "#00ff99" }}>TÀI: {result.tai}%</span>
+                <span style={{ color: "rgba(255,255,255,0.3)" }}>|</span>
+                <span style={{ color: "#ff0055" }}>XỈU: {result.xiu}%</span>
+              </div>
+
+              {/* History dots */}
+              {history.length > 0 && (
+                <div style={{
+                  display: "flex", justifyContent: "center", gap: 5, marginTop: 10,
+                  paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.1)",
+                }}>
+                  {history.map((dot, i) => (
+                    <div key={i} style={{
+                      width: 12, height: 12, borderRadius: "50%",
+                      background: dot.type === "T" ? "#00ff99" : "#ff0055",
+                      boxShadow: `0 0 5px ${dot.type === "T" ? "#00ff99" : "#ff0055"}`,
+                    }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Keyframe animations */}
       <style>{`
-        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
-        @keyframes lanternSwing {
-          0%, 100% { transform: rotate(-5deg); }
-          50% { transform: rotate(5deg); }
-        }
-        @keyframes petalFall {
-          0% { transform: translateY(-20px) rotate(0deg); opacity: 0; }
-          10% { opacity: 0.6; }
-          90% { opacity: 0.4; }
-          100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
-        }
-        @keyframes coinFloat {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          50% { transform: translateY(-20px) rotate(180deg); }
-        }
-        @keyframes robotFloat {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-10px); }
-        }
-        @keyframes shimmer {
-          0%, 100% { transform: translateX(-100%); }
-          50% { transform: translateX(100%); }
-        }
-        @keyframes gradientShift {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        @keyframes resultReveal {
-          0% { opacity: 0; transform: translateY(20px) scale(0.95); }
-          100% { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes resultGlow {
-          0% { filter: brightness(1); }
-          100% { filter: brightness(1.3); }
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Montserrat:wght@400;700&display=swap');
+        @keyframes neonGlow { 0% { filter: hue-rotate(0deg) blur(10px); } 100% { filter: hue-rotate(360deg) blur(10px); } }
+        @keyframes btnShine { 0% { left: -100%; } 100% { left: 100%; } }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
       `}</style>
     </div>
   );

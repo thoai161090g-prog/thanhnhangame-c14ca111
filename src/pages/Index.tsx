@@ -61,53 +61,33 @@ export default function Index() {
         <p className="text-sm text-white/80">Xin chào, <span className="text-gold font-bold">{user?.email}</span></p>
       </section>
 
-      {/* Section Title */}
-      <section className="relative z-10 text-center py-4 px-4">
-        <h2 className="text-xl font-black tracking-wide" style={{
-          background: "linear-gradient(135deg, #ffae00, #ffd700)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-        }}>
-          🎮 CHỌN NHÀ CÁI - NHẬN LỘC ĐẦU NĂM
-        </h2>
-      </section>
-
       {/* Game Cards Grid */}
-      <section className="relative z-10 max-w-lg mx-auto px-4 pb-8">
-        <div className="grid grid-cols-2 gap-4">
+      <section className="relative z-10 max-w-2xl mx-auto px-3 pb-8">
+        <div className="grid grid-cols-4 gap-2.5">
           {GAMES.map((game) => (
             <div
               key={game.id}
-              className="rounded-2xl p-[2px] cursor-pointer transition-transform hover:scale-[1.03] active:scale-[0.98]"
+              className="rounded-xl cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.97] hover:ring-2 hover:ring-yellow-400/60"
               style={{
-                background: "linear-gradient(135deg, #ffae00, #ff8c00, #ffae00)",
+                background: "rgba(30, 41, 59, 0.85)",
+                border: "1px solid rgba(100, 116, 139, 0.3)",
               }}
               onClick={() => navigate(`/game/${game.id}`)}
             >
-              <div className="rounded-2xl p-4 flex flex-col items-center gap-3" style={{
-                background: "rgba(255,248,230,0.95)",
-              }}>
-                {/* Game icon */}
+              <div className="rounded-xl p-3 flex flex-col items-center gap-2">
                 {game.image ? (
-                  <img src={game.image} alt={game.name} className="w-16 h-16 rounded-xl object-cover" style={{
-                    boxShadow: "0 4px 15px rgba(255,174,0,0.3)",
-                  }} />
+                  <img src={game.image} alt={game.name} className="w-11 h-11 rounded-lg object-cover" />
                 ) : (
-                  <div className="w-16 h-16 rounded-xl flex items-center justify-center text-4xl" style={{
-                    background: "linear-gradient(135deg, #fff5e0, #ffe4b3)",
-                    boxShadow: "0 4px 15px rgba(255,174,0,0.3)",
+                  <div className="w-11 h-11 rounded-lg flex items-center justify-center text-2xl" style={{
+                    background: "linear-gradient(135deg, rgba(100,116,139,0.4), rgba(51,65,85,0.6))",
                   }}>
                     {game.icon}
                   </div>
                 )}
-                <span className="font-bold text-sm" style={{ color: "#1a0a00" }}>{game.name}</span>
-                <button className="w-full py-2.5 rounded-xl font-black text-sm tracking-wider transition-all hover:brightness-110" style={{
-                  background: "linear-gradient(135deg, #ff8c00, #ffae00, #ffd000)",
-                  color: "#1a0a00",
-                  boxShadow: "0 3px 12px rgba(255,174,0,0.4)",
-                }}>
-                  MỞ TOOL
-                </button>
+                <div className="text-center">
+                  <p className="font-bold text-xs text-white leading-tight truncate w-full">{game.name}</p>
+                  <p className="text-[10px] text-slate-400">{game.subtitle}</p>
+                </div>
               </div>
             </div>
           ))}

@@ -11,6 +11,7 @@ import BuyKey from "./pages/BuyKey";
 import History from "./pages/History";
 import Admin from "./pages/Admin";
 import GameLC79 from "./pages/GameLC79";
+import GameBaccarat from "./pages/GameBaccarat";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/game/lc79" element={<ProtectedRoute><GameLC79 /></ProtectedRoute>} />
+            <Route path="/game/baccarat" element={<ProtectedRoute><GameBaccarat /></ProtectedRoute>} />
             <Route path="/game/:gameId" element={<ProtectedRoute><GameAnalysis /></ProtectedRoute>} />
             <Route path="/buy-key" element={<ProtectedRoute><BuyKey /></ProtectedRoute>} />
             <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />

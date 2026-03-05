@@ -5,13 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 const POLL_MS = 8000;
 
-interface BaccaratResult {
-  winner: string; // "B" | "P" | "T"
-}
-
 interface HistoryItem {
   type: "B" | "P" | "T";
-  count?: number; // for ties
+  count?: number;
 }
 
 interface BoardCell {
@@ -26,26 +22,13 @@ function clamp(val: number, min: number, max: number) {
 function detectPattern(history: HistoryItem[]): { pattern: string; prediction: string; reason: string } {
   const h = history.filter(x => x.type !== "T").map(x => x.type);
   const n = h.length;
-
   if (n < 2) return { pattern: "NONE", prediction: "", reason: "Cần thêm dữ liệu kết quả thực tế." };
-
   const last = h[n - 1];
   const p1 = h[n - 2];
   const p2 = n >= 3 ? h[n - 3] : undefined;
-
-  // Cầu Bệt (3+ same)
-  if (last === p1 && p1 === p2) {
-    return { pattern: "BET", prediction: last, reason: `Cầu Bệt: Đang bệt ${last}, bám dây ngay!` };
-  }
-  // Cầu 1-1
-  if (n >= 3 && last !== p1 && p1 !== p2) {
-    return { pattern: "1-1", prediction: last === "P" ? "B" : "P", reason: "Cầu 1-1: Nhịp nhảy BPB ổn định, đánh đối nghịch." };
-  }
-  // Cầu 2-2
-  if (n >= 3 && last !== p1 && p1 === p2) {
-    return { pattern: "2-2", prediction: last, reason: "Cầu 2-2: Vừa đổi màu, đánh cùng màu để đủ cặp." };
-  }
-
+  if (last === p1 && p1 === p2) return { pattern: "BET", prediction: last, reason: `Cầu Bệt: Đang bệt ${last}, bám dây ngay!` };
+  if (n >= 3 && last !== p1 && p1 !== p2) return { pattern: "1-1", prediction: last === "P" ? "B" : "P", reason: "Cầu 1-1: Nhịp nhảy BPB ổn định, đánh đối nghịch." };
+  if (n >= 3 && last !== p1 && p1 === p2) return { pattern: "2-2", prediction: last, reason: "Cầu 2-2: Vừa đổi màu, đánh cùng màu để đủ cặp." };
   return { pattern: "NONE", prediction: last, reason: "Đang chờ form cầu rõ ràng (1-1, 2-2 hoặc Bệt)." };
 }
 
@@ -53,7 +36,6 @@ function buildColumns(history: HistoryItem[]): BoardCell[][] {
   const columns: BoardCell[][] = [];
   let cur: BoardCell[] = [];
   let lastS: string | null = null;
-
   history.forEach(item => {
     if (item.type !== "T") {
       if (item.type !== lastS) {
@@ -80,6 +62,8 @@ export default function GameBaccarat() {
   const [online, setOnline] = useState(false);
   const [lastUpdate, setLastUpdate] = useState("Đang tải dữ liệu…");
   const [progress, setProgress] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [gameCount, setGameCount] = useState(0);
 
   // Draggable
   const [pos, setPos] = useState({ x: 20, y: 60 });
@@ -96,11 +80,8 @@ export default function GameBaccarat() {
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     dragState.current = {
-      dragging: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      startLeft: pos.x,
-      startTop: pos.y,
+      dragging: true, startX: e.clientX, startY: e.clientY,
+      startLeft: pos.x, startTop: pos.y,
     };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   }, [pos]);
@@ -119,10 +100,7 @@ export default function GameBaccarat() {
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
+    return () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
   }, [pos]);
 
   // Poll API
@@ -132,15 +110,16 @@ export default function GameBaccarat() {
       if (error) throw error;
       setApiData(data);
       setOnline(true);
+      setLoading(false);
 
-      // Auto-populate history from API if it returns results
+      // Parse results
       if (data && Array.isArray(data.results)) {
         const apiHistory: HistoryItem[] = data.results.map((r: any) => ({
           type: r.winner === "Banker" ? "B" : r.winner === "Player" ? "P" : "T" as "B" | "P" | "T",
         }));
         setHistory(apiHistory);
+        setGameCount(apiHistory.length);
       } else if (data && Array.isArray(data)) {
-        // If API returns array directly
         const apiHistory: HistoryItem[] = data.map((r: any) => {
           const w = (r.winner || r.result || "").toString().toUpperCase();
           if (w.startsWith("B") || w === "BANKER") return { type: "B" as const };
@@ -148,12 +127,31 @@ export default function GameBaccarat() {
           return { type: "T" as const };
         });
         setHistory(apiHistory);
+        setGameCount(apiHistory.length);
+      } else if (data && typeof data === "object") {
+        // Try to extract from nested structure
+        const allResults: HistoryItem[] = [];
+        Object.values(data).forEach((val: any) => {
+          if (Array.isArray(val)) {
+            val.forEach((r: any) => {
+              const w = (r.winner || r.result || r.W || "").toString().toUpperCase();
+              if (w.startsWith("B") || w === "BANKER") allResults.push({ type: "B" });
+              else if (w.startsWith("P") || w === "PLAYER") allResults.push({ type: "P" });
+              else if (w.startsWith("T") || w === "TIE") allResults.push({ type: "T" });
+            });
+          }
+        });
+        if (allResults.length > 0) {
+          setHistory(allResults);
+          setGameCount(allResults.length);
+        }
       }
 
       const now = new Date();
       setLastUpdate(`Cập nhật lúc ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`);
     } catch {
       setOnline(false);
+      setLoading(false);
       setLastUpdate("Lỗi tải dữ liệu, sẽ thử lại…");
     }
   }, []);
@@ -179,118 +177,150 @@ export default function GameBaccarat() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Manual record
   const record = (type: "B" | "P" | "T") => {
     setHistory(prev => {
       if (type === "T") {
         if (prev.length === 0) return prev;
         const last = prev[prev.length - 1];
-        if (last.type === "T") {
-          return [...prev.slice(0, -1), { ...last, count: (last.count || 1) + 1 }];
-        }
+        if (last.type === "T") return [...prev.slice(0, -1), { ...last, count: (last.count || 1) + 1 }];
         return [...prev, { type: "T", count: 1 }];
       }
       return [...prev, { type }];
     });
   };
 
-  const resetAll = () => {
-    setHistory([]);
-  };
-
   const columns = buildColumns(history);
   const { pattern, prediction, reason } = detectPattern(history);
 
+  const bankerCount = history.filter(h => h.type === "B").length;
+  const playerCount = history.filter(h => h.type === "P").length;
+  const tieCount = history.filter(h => h.type === "T").length;
+
+  // Last result
+  const lastResult = history.length > 0 ? history[history.length - 1].type : null;
+
   return (
-    <div style={{ margin: 0, background: "#111", minHeight: "100vh", overflow: "hidden", fontFamily: "sans-serif", color: "#fff" }}>
-      {/* Game iframe */}
-      <iframe
-        src="https://baccarat.net"
-        style={{ position: "fixed", inset: 0, width: "100vw", height: "100vh", border: "none", zIndex: 1 }}
-        title="Baccarat Game"
-      />
+    <div style={{ margin: 0, background: "#0a0a1a", minHeight: "100vh", overflow: "hidden", fontFamily: "'Orbitron', sans-serif", color: "#fff" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
 
       {/* Back button */}
-      <button
-        onClick={() => navigate("/")}
-        style={{
-          position: "fixed", top: 10, left: 10, zIndex: 10001,
-          padding: "6px 12px", borderRadius: 10, fontWeight: 700,
-          background: "rgba(0,0,0,0.8)", color: "#ffd700",
-          border: "1px solid rgba(255,215,0,0.3)", fontSize: 13, cursor: "pointer",
-          backdropFilter: "blur(10px)",
-        }}
-      >
-        ← Trang chủ
-      </button>
+      <button onClick={() => navigate("/")} style={{
+        position: "fixed", top: 10, left: 10, zIndex: 10001,
+        padding: "6px 12px", borderRadius: 10, fontWeight: 700,
+        background: "rgba(0,0,0,0.8)", color: "#ffd700",
+        border: "1px solid rgba(255,215,0,0.3)", fontSize: 13, cursor: "pointer",
+        backdropFilter: "blur(10px)",
+      }}>← Trang chủ</button>
 
       {/* Toggle button */}
       {!popupVisible && (
-        <button
-          onClick={() => setPopupVisible(true)}
-          style={{
-            position: "fixed", bottom: 20, right: 20, zIndex: 10001,
-            width: 50, height: 50, borderRadius: "50%",
-            background: "#000", border: "2px solid #e63946", color: "#e63946",
-            fontWeight: "bold", fontSize: 20, cursor: "pointer", display: "flex",
-            boxShadow: "0 0 15px #e63946", alignItems: "center", justifyContent: "center",
-          }}
-        >
-          🎴
+        <button onClick={() => setPopupVisible(true)} style={{
+          position: "fixed", bottom: 20, right: 20, zIndex: 10001,
+          width: 56, height: 56, borderRadius: "50%",
+          background: "radial-gradient(circle, #1a0030, #000)", border: "2px solid #a855f7",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 0 20px #a855f7, 0 0 40px rgba(168,85,247,0.3)",
+          overflow: "hidden", padding: 0,
+        }}>
+          <img src="/robot-bcr.gif" alt="Robot" style={{ width: 40, height: 40, objectFit: "contain" }} />
         </button>
       )}
 
+      {/* Loading Screen */}
+      {loading && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 20000,
+          background: "radial-gradient(ellipse at center, #1a0030 0%, #0a0a1a 70%)",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        }}>
+          <img src="/robot-bcr.gif" alt="Robot Loading" style={{
+            width: 180, height: 180, objectFit: "contain",
+            filter: "drop-shadow(0 0 30px #a855f7)",
+          }} />
+          <div style={{
+            marginTop: 20, fontSize: 16, fontWeight: 900, color: "#ffd700",
+            textShadow: "0 0 10px #ffd700",
+            animation: "pulse 1.5s infinite",
+          }}>
+            🤖 ĐANG KẾT NỐI DỮ LIỆU...
+          </div>
+          <div style={{
+            marginTop: 10, fontSize: 11, color: "#a855f7",
+            animation: "pulse 2s infinite",
+          }}>
+            Hệ thống AI đang phân tích ván Baccarat
+          </div>
+          <div style={{
+            marginTop: 20, width: 200, height: 4, background: "#1a1a2e",
+            borderRadius: 999, overflow: "hidden",
+          }}>
+            <div style={{
+              height: "100%", background: "linear-gradient(90deg, #a855f7, #ffd700)",
+              animation: "loadBar 2s ease-in-out infinite",
+            }} />
+          </div>
+        </div>
+      )}
+
       {/* Draggable Panel */}
-      {popupVisible && (
-        <div
-          style={{
-            position: "fixed", left: pos.x, top: pos.y, width: 340, zIndex: 10000,
-            background: "rgba(17, 17, 17, 0.92)",
-            backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-            borderRadius: 16, padding: 14,
-            border: "1px solid rgba(255,255,255,0.15)",
-            boxShadow: "0 20px 50px rgba(0,0,0,0.6)",
-            maxHeight: "85vh", overflowY: "auto",
-          }}
-        >
+      {popupVisible && !loading && (
+        <div style={{
+          position: "fixed", left: pos.x, top: pos.y, width: 350, zIndex: 10000,
+          background: "rgba(10, 10, 30, 0.95)",
+          backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+          borderRadius: 16, padding: 14,
+          border: "1px solid rgba(168,85,247,0.3)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(168,85,247,0.15)",
+          maxHeight: "90vh", overflowY: "auto",
+        }}>
           {/* Neon border */}
           <div style={{
             position: "absolute", inset: -2, borderRadius: 18,
-            background: "linear-gradient(45deg, #e63946, #0077b6, #2a9d8f, #e63946)",
-            zIndex: -1, filter: "blur(8px)", opacity: 0.6,
+            background: "linear-gradient(45deg, #a855f7, #e63946, #0077b6, #ffd700, #a855f7)",
+            zIndex: -1, filter: "blur(8px)", opacity: 0.5,
             animation: "neonGlow 6s linear infinite",
           }} />
 
           {/* Header */}
-          <div
-            onPointerDown={onPointerDown}
-            style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              marginBottom: 10, cursor: "move", touchAction: "none",
-            }}
-          >
-            <span style={{ fontWeight: 900, fontSize: 14, color: "#ffd700", letterSpacing: 1 }}>
-              🎴 BACCARAT AI VIP
-            </span>
+          <div onPointerDown={onPointerDown} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            marginBottom: 10, cursor: "move", touchAction: "none",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <img src="/robot-bcr.gif" alt="Robot" style={{ width: 32, height: 32, borderRadius: "50%" }} />
+              <span style={{ fontWeight: 900, fontSize: 13, color: "#ffd700", letterSpacing: 1 }}>
+                SEXY BCR VIP TOOL
+              </span>
+            </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{
                 width: 8, height: 8, borderRadius: "50%",
                 background: online ? "#22c55e" : "#f97316",
-                boxShadow: online ? "0 0 6px #22c55e" : "0 0 6px #f97316",
+                boxShadow: online ? "0 0 8px #22c55e" : "0 0 8px #f97316",
               }} />
-              <span
-                onClick={() => setPopupVisible(false)}
-                style={{ color: "rgba(255,255,255,0.5)", fontWeight: "bold", cursor: "pointer", fontSize: 16 }}
-              >
-                ✕
-              </span>
+              <span onClick={() => setPopupVisible(false)} style={{
+                color: "rgba(255,255,255,0.5)", fontWeight: "bold", cursor: "pointer", fontSize: 16,
+              }}>✕</span>
             </div>
+          </div>
+
+          {/* Game Stats Bar */}
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "6px 10px", borderRadius: 8, marginBottom: 10,
+            background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.2)",
+            fontSize: 10,
+          }}>
+            <span style={{ color: "#a855f7" }}>📊 Tổng ván: <b style={{ color: "#ffd700" }}>#{gameCount}</b></span>
+            <span style={{ color: "#e63946" }}>B: {bankerCount}</span>
+            <span style={{ color: "#0077b6" }}>P: {playerCount}</span>
+            <span style={{ color: "#2a9d8f" }}>T: {tieCount}</span>
           </div>
 
           {/* Board */}
           <div style={{
             background: "#fff", width: "100%", height: 156, overflowX: "auto",
-            display: "flex", border: "2px solid #444", marginBottom: 10, borderRadius: 4,
+            display: "flex", border: "2px solid #333", marginBottom: 10, borderRadius: 4,
           }}>
             {columns.map((col, ci) => (
               <div key={ci} style={{ display: "flex", flexDirection: "column", minWidth: 26, borderRight: "1px solid #eee" }}>
@@ -309,10 +339,7 @@ export default function GameBaccarat() {
                           }} />
                         )}
                         {col[ri].ties > 1 && (
-                          <div style={{
-                            position: "absolute", color: "#000", fontSize: 8, fontWeight: "bold",
-                            zIndex: 3, right: 1, bottom: 1,
-                          }}>
+                          <div style={{ position: "absolute", color: "#000", fontSize: 8, fontWeight: "bold", zIndex: 3, right: 1, bottom: 1 }}>
                             {col[ri].ties}
                           </div>
                         )}
@@ -322,9 +349,7 @@ export default function GameBaccarat() {
                           fontSize: 9, fontWeight: "bold", color: "#fff",
                           background: col[ri].side === "B" ? "#e63946" : "#0077b6",
                           zIndex: 4,
-                        }}>
-                          {col[ri].side}
-                        </div>
+                        }}>{col[ri].side}</div>
                       </>
                     )}
                   </div>
@@ -338,53 +363,109 @@ export default function GameBaccarat() {
             )}
           </div>
 
-          {/* Controls */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
-            <button onClick={() => record("P")} style={{ padding: 10, fontWeight: "bold", border: "none", borderRadius: 6, cursor: "pointer", color: "#fff", background: "#0077b6", fontSize: 12 }}>PLAYER</button>
-            <button onClick={() => record("B")} style={{ padding: 10, fontWeight: "bold", border: "none", borderRadius: 6, cursor: "pointer", color: "#fff", background: "#e63946", fontSize: 12 }}>BANKER</button>
-            <button onClick={() => record("T")} style={{ padding: 10, fontWeight: "bold", border: "none", borderRadius: 6, cursor: "pointer", color: "#fff", background: "#2a9d8f", fontSize: 12 }}>TIE</button>
+          {/* Last Result & Prediction */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div style={{
+              padding: 12, borderRadius: 10, textAlign: "center",
+              background: "rgba(30,30,60,0.8)", border: "1px solid #444",
+            }}>
+              <div style={{ fontSize: 9, color: "#888", marginBottom: 4 }}>KẾT QUẢ</div>
+              <div style={{
+                fontSize: 20, fontWeight: 900,
+                color: lastResult === "B" ? "#e63946" : lastResult === "P" ? "#0077b6" : lastResult === "T" ? "#2a9d8f" : "#444",
+                textShadow: lastResult ? `0 0 15px ${lastResult === "B" ? "#e63946" : lastResult === "P" ? "#0077b6" : "#2a9d8f"}` : "none",
+              }}>
+                {lastResult === "B" ? "BANKER" : lastResult === "P" ? "PLAYER" : lastResult === "T" ? "TIE" : "---"}
+              </div>
+            </div>
+            <div style={{
+              padding: 12, borderRadius: 10, textAlign: "center",
+              background: "rgba(30,30,60,0.8)", border: `1px solid ${prediction === "B" ? "#e63946" : prediction === "P" ? "#0077b6" : "#444"}`,
+              boxShadow: prediction ? `0 0 15px ${prediction === "B" ? "rgba(230,57,70,0.3)" : "rgba(0,119,182,0.3)"}` : "none",
+            }}>
+              <div style={{ fontSize: 9, color: "#ffd700", marginBottom: 4 }}>DỰ ĐOÁN</div>
+              <div style={{
+                fontSize: 20, fontWeight: 900,
+                color: prediction === "B" ? "#e63946" : prediction === "P" ? "#0077b6" : "#444",
+                textShadow: prediction ? `0 0 15px ${prediction === "B" ? "#e63946" : "#0077b6"}` : "none",
+                animation: prediction ? "pulse 2s infinite" : "none",
+              }}>
+                {prediction === "B" ? "BANKER" : prediction === "P" ? "PLAYER" : "---"}
+              </div>
+            </div>
           </div>
-          <button onClick={resetAll} style={{ width: "100%", padding: 8, fontWeight: "bold", border: "none", borderRadius: 6, cursor: "pointer", color: "#fff", background: "#333", fontSize: 11, marginBottom: 10 }}>XÓA DỮ LIỆU</button>
 
-          {/* Prediction */}
+          {/* Pattern info */}
           <div style={{
-            width: "100%", padding: 12, borderRadius: 10,
-            background: "#222", textAlign: "center", border: "1px solid #444",
+            padding: 8, borderRadius: 8, marginBottom: 10,
+            background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.15)",
+            textAlign: "center",
           }}>
-            <div style={{ fontSize: 10, background: "#444", padding: "2px 10px", borderRadius: 20, display: "inline-block", marginBottom: 6 }}>
+            <div style={{ fontSize: 9, color: "#a855f7", marginBottom: 2 }}>
               TRẠNG THÁI: {pattern === "NONE" ? "DÒ CẦU" : `CẦU ${pattern}`}
             </div>
-            <div style={{ fontSize: 10, color: "#888" }}>DỰ ĐOÁN TIẾP THEO</div>
-            <div style={{
-              fontSize: 22, fontWeight: 900, margin: "8px 0", padding: 6, borderRadius: 6,
-              color: prediction === "P" ? "#00b4d8" : prediction === "B" ? "#ff4d4d" : "#888",
-              border: prediction ? `2px solid ${prediction === "P" ? "#0077b6" : "#e63946"}` : "2px solid #444",
-            }}>
-              {prediction === "P" ? "PLAYER" : prediction === "B" ? "BANKER" : "---"}
-            </div>
-            <div style={{ fontSize: 11, color: "#aaa", minHeight: 30 }}>{reason}</div>
+            <div style={{ fontSize: 10, color: "#aaa" }}>{reason}</div>
           </div>
 
-          {/* API Status */}
-          <div style={{ marginTop: 8 }}>
+          {/* Controls */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
+            <button onClick={() => record("P")} style={{
+              padding: 10, fontWeight: "bold", border: "none", borderRadius: 6,
+              cursor: "pointer", color: "#fff", background: "linear-gradient(135deg, #0077b6, #00b4d8)",
+              fontSize: 11, boxShadow: "0 2px 10px rgba(0,119,182,0.3)",
+            }}>PLAYER</button>
+            <button onClick={() => record("B")} style={{
+              padding: 10, fontWeight: "bold", border: "none", borderRadius: 6,
+              cursor: "pointer", color: "#fff", background: "linear-gradient(135deg, #e63946, #ff6b6b)",
+              fontSize: 11, boxShadow: "0 2px 10px rgba(230,57,70,0.3)",
+            }}>BANKER</button>
+            <button onClick={() => record("T")} style={{
+              padding: 10, fontWeight: "bold", border: "none", borderRadius: 6,
+              cursor: "pointer", color: "#fff", background: "linear-gradient(135deg, #2a9d8f, #52b788)",
+              fontSize: 11, boxShadow: "0 2px 10px rgba(42,157,143,0.3)",
+            }}>TIE</button>
+          </div>
+          <button onClick={() => setHistory([])} style={{
+            width: "100%", padding: 8, fontWeight: "bold", border: "1px solid #333",
+            borderRadius: 6, cursor: "pointer", color: "#888", background: "transparent",
+            fontSize: 10, marginBottom: 8,
+          }}>XÓA DỮ LIỆU</button>
+
+          {/* History dots */}
+          <div style={{
+            display: "flex", gap: 3, flexWrap: "wrap", padding: "6px 0",
+            borderTop: "1px solid rgba(255,255,255,0.05)", marginBottom: 6,
+          }}>
+            {history.slice(-30).map((h, i) => (
+              <div key={i} style={{
+                width: 18, height: 18, borderRadius: "50%", display: "flex",
+                alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 900, color: "#fff",
+                background: h.type === "B" ? "#e63946" : h.type === "P" ? "#0077b6" : "#2a9d8f",
+                boxShadow: `0 0 4px ${h.type === "B" ? "#e63946" : h.type === "P" ? "#0077b6" : "#2a9d8f"}`,
+              }}>{h.type}</div>
+            ))}
+          </div>
+
+          {/* Progress bar */}
+          <div>
             <div style={{
-              position: "relative", height: 4, background: "#0a2a38",
+              position: "relative", height: 3, background: "#1a1a2e",
               borderRadius: 999, overflow: "hidden",
             }}>
               <div style={{
                 position: "absolute", inset: `0 ${(1 - progress) * 100}% 0 0`,
-                background: "linear-gradient(90deg, #e63946, #0077b6)",
+                background: "linear-gradient(90deg, #a855f7, #ffd700)",
                 transition: "inset 0.08s linear",
               }} />
             </div>
-            <div style={{ marginTop: 4, fontSize: 10, opacity: 0.7 }}>{lastUpdate}</div>
+            <div style={{ marginTop: 3, fontSize: 9, opacity: 0.5 }}>{lastUpdate}</div>
           </div>
 
-          {/* Raw API data preview */}
+          {/* API debug */}
           {apiData && (
-            <details style={{ marginTop: 8 }}>
-              <summary style={{ fontSize: 10, color: "#666", cursor: "pointer" }}>API Data</summary>
-              <pre style={{ fontSize: 9, color: "#888", maxHeight: 100, overflow: "auto", background: "#1a1a1a", padding: 6, borderRadius: 6, marginTop: 4 }}>
+            <details style={{ marginTop: 6 }}>
+              <summary style={{ fontSize: 9, color: "#555", cursor: "pointer" }}>API Data</summary>
+              <pre style={{ fontSize: 8, color: "#666", maxHeight: 80, overflow: "auto", background: "#111", padding: 4, borderRadius: 4, marginTop: 2 }}>
                 {JSON.stringify(apiData, null, 2).slice(0, 500)}
               </pre>
             </details>
@@ -392,9 +473,11 @@ export default function GameBaccarat() {
         </div>
       )}
 
-      {/* Animations */}
+      {/* CSS Animations */}
       <style>{`
         @keyframes neonGlow { 0% { filter: hue-rotate(0deg) blur(8px); } 100% { filter: hue-rotate(360deg) blur(8px); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        @keyframes loadBar { 0% { width: 0; } 50% { width: 100%; } 100% { width: 0; } }
       `}</style>
     </div>
   );

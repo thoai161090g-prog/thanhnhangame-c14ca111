@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const resp = await fetch("http://160.250.5.186:6001/sexy/all", {
+    const resp = await fetch("https://bacaratsexy-rjx0.onrender.com/all", {
       headers: { "Accept": "application/json" },
     });
 

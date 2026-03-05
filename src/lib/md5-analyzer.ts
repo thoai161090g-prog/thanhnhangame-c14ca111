@@ -29,7 +29,7 @@ export const GAMES = [
   { id: "lc79", name: "LC79", subtitle: "Game bài", icon: "👑", image: null },
   { id: "xocdia88", name: "XOCDIA88", subtitle: "Xóc đĩa", icon: "🎵", image: null },
   { id: "thien-duong", name: "THIÊN ĐƯỜNG TRÒ CHƠI", subtitle: "Casino", icon: "🦊", image: "/game-thien-duong.jpeg" },
-  { id: "baccarat", name: "BACCARAT", subtitle: "Bài", icon: "♥️", image: null },
+  { id: "baccarat", name: "BACCARAT", subtitle: "Bài", icon: "♥️", image: "/game-baccarat.png" },
 ] as const;
 
 export function formatVND(amount: number): string {
